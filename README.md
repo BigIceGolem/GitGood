@@ -1,0 +1,2 @@
+# GitGood
+AI Hackathon
