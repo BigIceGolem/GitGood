@@ -9,7 +9,7 @@ import java.util.concurrent.TimeUnit;
 public class ExtractionAgent {
 
     // IMPORTANT: Paste your actual Google Gemini API key here
-    private static final String API_KEY = "AIzaSyA9m5k6gRNwp92plqbJ6RFWu1tLFBGi93E";
+    private static final String API_KEY = "AIzaSyBb7bI09xmyt_yuKgyF8u6aQ6kxAqeC2bE";
 
     // Google Gemini endpoint (Note: the API key goes directly in the URL)
     private static final String API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=" + API_KEY;
