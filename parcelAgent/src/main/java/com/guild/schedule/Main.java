@@ -33,24 +33,30 @@ public class Main {
             System.out.println("Sent immediate 200 OK to Twilio. Handing image to background thread...");
 
             // 2. ASYNCHRONOUS PROCESSING: Run the heavy AI engine in the background
+            // 2. ASYNCHRONOUS PROCESSING: Run the heavy AI engine in the background
             CompletableFuture.runAsync(() -> {
-                System.out.println("[Background Thread] Downloading image and pinging Gemini...");
+                System.out.println("[Background Thread] Downloading image and pinging Agent A...");
                 String jsonResult = ExtractionAgent.processWithGLM(incomingText, incomingImage);
 
-                // Clean the output in case Gemini added markdown backticks
+                // Clean the output from Agent A
                 String cleanJson = jsonResult.replace("```json", "").replace("```", "").trim();
                 System.out.println("[Background Thread] Agent A Output: " + cleanJson);
 
-                // 3. PUSH NOTIFICATION: Send the final JSON back to the user via Twilio REST API
-                sendTwilioReply(senderPhone, twilioSandboxNumber, "Processed by Agent A:\n" + cleanJson);
+                // --- YOUR NEW AGENT C LOGIC GOES HERE ---
+                System.out.println("[Background Thread] Sending to Agent C...");
+                String decision = DecisionAgent.makeDecision(cleanJson, incomingText);
+                System.out.println("[Background Thread] Agent C Decision: " + decision);
+
+                // 3. PUSH NOTIFICATION: Send Agent C's final decision back to the user via Twilio
+                sendTwilioReply(senderPhone, twilioSandboxNumber, decision);
             });
         });
     }
 
     // Helper method to push messages to WhatsApp using OkHttp
     private static void sendTwilioReply(String toPhone, String fromPhone, String messageBody) {
-        String twilioSid = "AC05962ce67910d50b03e6916467b12cf0";
-        String twilioToken = "eb2a7f509bcf70478d9fb059d274a4e3"; // <-- PASTE YOUR TOKEN HERE
+        String twilioSid = "-";
+        String twilioToken = "-"; // <-- PASTE YOUR TOKEN HERE
 
         OkHttpClient client = new OkHttpClient();
         String credential = Credentials.basic(twilioSid, twilioToken);
