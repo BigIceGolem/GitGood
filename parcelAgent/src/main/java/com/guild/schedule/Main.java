@@ -4,40 +4,40 @@ import io.javalin.Javalin;
 
 public class Main {
     public static void main(String[] args) {
+        // 1. Start a lightweight web server on port 8080
         Javalin app = Javalin.create().start(8080);
-        System.out.println("Server is running! Waiting for Meta verification...");
+        System.out.println("Server is running! Listening for WhatsApp messages on port 8080...");
 
-        // 1. META SECURITY ROUTE (GET)
-        // Meta will hit this URL once to verify you own the server.
-        app.get("/whatsapp/webhook", ctx -> {
-
-            // This is our secret password. We will type this into the Meta dashboard later.
-            String MY_VERIFY_TOKEN = "hackathon2026";
-
-            String mode = ctx.queryParam("hub.mode");
-            String token = ctx.queryParam("hub.verify_token");
-            String challenge = ctx.queryParam("hub.challenge");
-
-            if (mode != null && token != null) {
-                if (mode.equals("subscribe") && token.equals(MY_VERIFY_TOKEN)) {
-                    System.out.println("SUCCESS: Webhook verified by Meta!");
-                    // Meta requires us to echo back the challenge string exactly as received
-                    ctx.status(200).result(challenge);
-                } else {
-                    ctx.status(403);
-                }
-            }
-        });
-
-        // 2. META MESSAGE ROUTE (POST)
-        // Once verified, Meta will send the actual WhatsApp messages here as JSON.
+        // 2. Create the webhook endpoint for Twilio to send data to
         app.post("/whatsapp/webhook", ctx -> {
-            String rawJson = ctx.body();
-            System.out.println("\n--- Incoming Meta Message ---");
-            System.out.println(rawJson);
 
-            // You MUST return a 200 OK immediately, or Meta will think your server crashed and spam you.
-            ctx.status(200);
+            // Extract the text and image that the user sent via WhatsApp
+            String incomingText = ctx.formParam("Body");
+            String incomingImage = ctx.formParam("MediaUrl0");
+
+            System.out.println("\n--- New WhatsApp Message Received ---");
+            System.out.println("Text: " + incomingText);
+
+            // 3. Handling Constraints: If the user forgot to attach a photo, intercept and ask for one.
+            if (incomingImage == null || incomingImage.isEmpty()) {
+                System.out.println("No image attached. Triggering fallback response.");
+                String fallbackReply = "<Response><Message>Please attach a photo of the damaged parcel so I can assess it!</Message></Response>";
+                ctx.contentType("application/xml");
+                ctx.result(fallbackReply);
+                return; // Stop execution here
+            }
+
+            // 4. Pass the real WhatsApp data to your Gemini Agent
+            System.out.println("Image received. Sending to Agent A...");
+            String jsonResult = ExtractionAgent.processWithGLM(incomingText, incomingImage);
+
+            System.out.println("Agent A Output: " + jsonResult);
+
+            // 5. Reply back to the user's WhatsApp
+            // Twilio requires replies to be formatted in TwiML (XML)
+            String twimlResponse = "<Response><Message>Processed by Agent A:\n" + jsonResult + "</Message></Response>";
+            ctx.contentType("application/xml");
+            ctx.result(twimlResponse);
         });
     }
 }
