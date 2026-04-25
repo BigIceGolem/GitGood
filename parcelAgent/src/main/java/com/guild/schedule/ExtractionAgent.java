@@ -9,7 +9,7 @@ import java.util.concurrent.TimeUnit;
 public class ExtractionAgent {
 
     // IMPORTANT: Paste your actual Google Gemini API key here
-    private static final String API_KEY = "AIzaSyBb7bI09xmyt_yuKgyF8u6aQ6kxAqeC2bE";
+    private static final String API_KEY = "AIzaSyCqh4NG_brGlrhazsGX17TXF9FtunaBXqw";
 
     // Google Gemini endpoint (Note: the API key goes directly in the URL)
     private static final String API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=" + API_KEY;
@@ -32,7 +32,7 @@ public class ExtractionAgent {
                     byte[] imageBytes = imgResponse.body().bytes();
                     base64Image = Base64.getEncoder().encodeToString(imageBytes);
                 } else {
-                    System.err.println("Failed to download image from URL.");
+                    System.err.println("Failed to download image. HTTP Code: " + imgResponse.code() + " | URL: " + imageUrl);
                     return "{\"trackingNumber\": null, \"damageLevel\": null}";
                 }
             }

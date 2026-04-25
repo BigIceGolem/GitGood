@@ -1,43 +1,82 @@
 package com.guild.schedule;
 
 import io.javalin.Javalin;
+import okhttp3.*;
+import java.io.IOException;
+import java.util.concurrent.CompletableFuture;
 
 public class Main {
     public static void main(String[] args) {
-        // 1. Start a lightweight web server on port 8080
         Javalin app = Javalin.create().start(8080);
-        System.out.println("Server is running! Listening for WhatsApp messages on port 8080...");
+        System.out.println("Server is running! Listening for WhatsApp messages...");
 
-        // 2. Create the webhook endpoint for Twilio to send data to
         app.post("/whatsapp/webhook", ctx -> {
 
-            // Extract the text and image that the user sent via WhatsApp
             String incomingText = ctx.formParam("Body");
             String incomingImage = ctx.formParam("MediaUrl0");
 
-            System.out.println("\n--- New WhatsApp Message Received ---");
-            System.out.println("Text: " + incomingText);
+            // We need to capture the phone numbers so the background thread knows who to text back
+            String senderPhone = ctx.formParam("From");
+            String twilioSandboxNumber = ctx.formParam("To");
 
-            // 3. Handling Constraints: If the user forgot to attach a photo, intercept and ask for one.
+            System.out.println("\n--- New WhatsApp Message Received ---");
+
             if (incomingImage == null || incomingImage.isEmpty()) {
-                System.out.println("No image attached. Triggering fallback response.");
-                String fallbackReply = "<Response><Message>Please attach a photo of the damaged parcel so I can assess it!</Message></Response>";
                 ctx.contentType("application/xml");
-                ctx.result(fallbackReply);
-                return; // Stop execution here
+                ctx.result("<Response><Message>Please attach a photo of the damaged parcel!</Message></Response>");
+                return;
             }
 
-            // 4. Pass the real WhatsApp data to your Gemini Agent
-            System.out.println("Image received. Sending to Agent A...");
-            String jsonResult = ExtractionAgent.processWithGLM(incomingText, incomingImage);
-
-            System.out.println("Agent A Output: " + jsonResult);
-
-            // 5. Reply back to the user's WhatsApp
-            // Twilio requires replies to be formatted in TwiML (XML)
-            String twimlResponse = "<Response><Message>Processed by Agent A:\n" + jsonResult + "</Message></Response>";
+            // 1. INSTANT REPLY: Give Twilio an empty TwiML response immediately to beat the 15s timeout
             ctx.contentType("application/xml");
-            ctx.result(twimlResponse);
+            ctx.result("<Response></Response>");
+            System.out.println("Sent immediate 200 OK to Twilio. Handing image to background thread...");
+
+            // 2. ASYNCHRONOUS PROCESSING: Run the heavy AI engine in the background
+            CompletableFuture.runAsync(() -> {
+                System.out.println("[Background Thread] Downloading image and pinging Gemini...");
+                String jsonResult = ExtractionAgent.processWithGLM(incomingText, incomingImage);
+
+                // Clean the output in case Gemini added markdown backticks
+                String cleanJson = jsonResult.replace("```json", "").replace("```", "").trim();
+                System.out.println("[Background Thread] Agent A Output: " + cleanJson);
+
+                // 3. PUSH NOTIFICATION: Send the final JSON back to the user via Twilio REST API
+                sendTwilioReply(senderPhone, twilioSandboxNumber, "Processed by Agent A:\n" + cleanJson);
+            });
         });
+    }
+
+    // Helper method to push messages to WhatsApp using OkHttp
+    private static void sendTwilioReply(String toPhone, String fromPhone, String messageBody) {
+        String twilioSid = "AC05962ce67910d50b03e6916467b12cf0";
+        String twilioToken = "eb2a7f509bcf70478d9fb059d274a4e3"; // <-- PASTE YOUR TOKEN HERE
+
+        OkHttpClient client = new OkHttpClient();
+        String credential = Credentials.basic(twilioSid, twilioToken);
+
+        RequestBody body = new FormBody.Builder()
+                .add("To", toPhone)
+                .add("From", fromPhone)
+                .add("Body", messageBody)
+                .build();
+
+        Request request = new Request.Builder()
+                .url("https://api.twilio.com/2010-04-01/Accounts/" + twilioSid + "/Messages.json")
+                .addHeader("Authorization", credential)
+                .post(body)
+                .build();
+
+        try {
+            Response response = client.newCall(request).execute();
+            if(response.isSuccessful()) {
+                System.out.println("[Background Thread] Successfully pushed final message to WhatsApp!");
+            } else {
+                System.err.println("[Background Thread] Failed to send WhatsApp reply: " + response.code());
+            }
+            response.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 }
